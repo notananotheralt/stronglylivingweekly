@@ -14,9 +14,9 @@
   --gold: #c3a676;
   --gold-deep: color-mix(in srgb, var(--gold) 68%, var(--canvas));
   --shadow: 0 28px 90px rgb(0 0 0 / 22%);
-  --sans: Inter, Avenir, 'Segoe UI', system-ui, sans-serif;
-  --serif: Georgia, 'Times New Roman', serif;
-  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --sans: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  --serif: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  --mono: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
 
   color: var(--ink);
   background: var(--canvas);
@@ -35,6 +35,12 @@ html {
   min-width: 320px;
   min-height: 100%;
   background: var(--canvas);
+}
+
+html.is-native,
+html.is-native body,
+html.is-native #root {
+  background: transparent;
 }
 
 body {

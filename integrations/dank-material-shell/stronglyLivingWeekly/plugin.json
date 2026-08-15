@@ -1,0 +1,13 @@
+{
+  "id": "stronglyLivingWeekly",
+  "name": "Strongly Living Weekly",
+  "description": "Privacy-filtered life-week capsule for the DankBar",
+  "version": "0.1.0",
+  "author": "notananotheralt",
+  "icon": "calendar_view_week",
+  "type": "widget",
+  "capabilities": ["dankbar-widget"],
+  "component": "./StronglyLivingWeeklyWidget.qml",
+  "requires_dms": ">=1.5.0",
+  "permissions": []
+}

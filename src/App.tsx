@@ -7,6 +7,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { SetupForm } from './components/SetupForm'
 import { WeekEditor } from './components/WeekEditor'
 import { calculateClockProgress } from './core/dates/clockProgress'
+import { createDesktopSummary } from './core/desktopSummary'
 import {
   calculateLifeStats,
   generateLifeWeeks,
@@ -16,6 +17,7 @@ import {
   todayISO,
 } from './core/dates/localDate'
 import { themeVariables } from './core/theme'
+import { getDesktopBridge, isTauriRuntime } from './platform'
 import {
   getWeekDisplayState,
   isDateInsideWeek,
@@ -120,6 +122,47 @@ function App() {
     (entry) => entry.reviewKind === 'on-time',
   ).length
 
+  useEffect(() => {
+    if (!settings || !currentWeek) {
+      return
+    }
+
+    const summary = createDesktopSummary({
+      settings,
+      anchorWeek: currentWeek,
+      recordedWeeks,
+      currentCommitment,
+      generatedAt: now.toISOString(),
+    })
+
+    void getDesktopBridge()
+      .then((desktop) => desktop.writeDesktopSummary(summary))
+      .catch((error: unknown) => {
+        console.error('Could not update the desktop summary.', error)
+      })
+  }, [currentCommitment, currentWeek, now, recordedWeeks, settings])
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent): void {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      if (settingsOpen) {
+        setSettingsOpen(false)
+      } else if (selectedWeekStart) {
+        setSelectedWeekStart('')
+      } else if (focusMode) {
+        setFocusMode(false)
+      } else if (isTauriRuntime()) {
+        void getDesktopBridge().then((desktop) => desktop.closeMainWindow())
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [focusMode, selectedWeekStart, settingsOpen])
+
   function commitmentBefore(week: LifeWeek): string {
     if (week.index === 0) {
       return ''
@@ -209,21 +252,26 @@ function App() {
     setSettingsState(nextSettings)
   }
 
-  function downloadBackup(): void {
+  async function downloadBackup(): Promise<void> {
     if (!settings) {
       return
     }
 
     const backup = createBackup(settings, entries, dailyNotes)
-    const blob = new Blob([JSON.stringify(backup, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `strongly-living-weekly-${today}.json`
-    link.click()
-    URL.revokeObjectURL(url)
+
+    try {
+      const desktop = await getDesktopBridge()
+      await desktop.exportBackup(
+        JSON.stringify(backup, null, 2),
+        `strongly-living-weekly-${today}.json`,
+      )
+    } catch (error) {
+      setDataStatus(
+        error instanceof Error
+          ? error.message
+          : 'The backup could not be exported.',
+      )
+    }
   }
 
   async function handleBackupImport(
@@ -287,7 +335,7 @@ function App() {
       className={`map-screen map-screen--${settings.privacyMode}${focusMode ? ' is-focus' : ''}`}
       style={mapTheme}
     >
-      <header className="metric-strip">
+      <header className="metric-strip" data-tauri-drag-region>
         <div className="metric-strip__items">
           {settings.showDate && (
             <div className="top-metric top-metric--date">
@@ -350,6 +398,20 @@ function App() {
           >
             ...
           </button>
+          {isTauriRuntime() && (
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => {
+                void getDesktopBridge().then((desktop) =>
+                  desktop.closeMainWindow(),
+                )
+              }}
+              aria-label="Close Strongly Living Weekly"
+            >
+              ×
+            </button>
+          )}
         </div>
       </header>
 
