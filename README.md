@@ -1,75 +1,63 @@
-# React + TypeScript + Vite
+# Strongly Living Weekly
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A quiet, local-first 4,160-week map built around a deliberate weekly review.
 
-Currently, two official plugins are available:
+## Current beta
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Fixed 4,160-week calendar anchored to the birthdate
+- Full 80-column by 52-row desktop map
+- Privacy and Personal display modes
+- Monday-only reviews for the week that just ended
+- Three-part weekly review: what happened, one 1-5 rating, and one commitment
+- Clearly distinct on-time, missed, and retrospective weeks
+- Optional same-day notes inside the current week
+- "This week in previous years" when historical records exist
+- Commitment or user-saved quote strip
+- Local version-two persistence with migration from the original beta
+- Version-one and version-two JSON backup import
+- Version-two JSON backup export including daily notes
 
-## React Compiler
+The passive view intentionally has no live clock. It is designed to become the
+source for a periodically generated desktop wallpaper, while the operating
+system or a future lightweight widget owns live time.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Development
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Quality checks:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm test
+npm run lint
+npm run build
 ```
+
+## Architecture
+
+```text
+src/
+|-- components/       Map, sheets, setup, and settings
+|-- core/             Pure models and date/review calculations
+|-- storage/          Local persistence, migration, and backups
+|-- App.tsx           Application state and interaction modes
+`-- App.css           16:10 passive and focused layouts
+```
+
+The React application remains platform-neutral. Future wallpaper, launcher,
+Tauri, and desktop-environment integrations should consume the same core logic
+and privacy-filtered view model rather than duplicating journal behavior.
+
+## Linux handoff
+
+The intended Hyprland architecture, Windows-side test options, remaining beta
+work, and first Ubuntu ARM64 bring-up checklist are documented in
+[`docs/ubuntu-hyprland-handoff.md`](docs/ubuntu-hyprland-handoff.md).
+
+For the command-level port sequence, native file contracts, Tauri boundary,
+version-sensitive Hyprland rule templates, packaging steps, and acceptance
+matrix, use
+[`docs/ubuntu-hyprland-port-runbook.md`](docs/ubuntu-hyprland-port-runbook.md).
