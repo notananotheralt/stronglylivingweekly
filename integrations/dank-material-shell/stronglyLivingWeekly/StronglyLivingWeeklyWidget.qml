@@ -18,7 +18,6 @@ PluginComponent {
     readonly property string summaryPath: stateHome + "/stronglylivingweekly/summary-v1.json"
     readonly property int currentWeekNumber: deriveCurrentWeekNumber()
     readonly property int daysRemaining: deriveDaysRemaining()
-    readonly property string currentCommitment: deriveCommitment()
     readonly property string weekText: summaryValid
         ? "Week " + currentWeekNumber + " / " + summary.totalWeeks + "  ·  " + daysRemaining + "d"
         : summaryError
@@ -32,13 +31,6 @@ PluginComponent {
         return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     }
 
-    function localISO(date) {
-        const year = String(date.getFullYear()).padStart(4, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        return year + "-" + month + "-" + day;
-    }
-
     function validateSummary(value) {
         if (!value || value.schema !== "stronglylivingweekly.summary.v1")
             return false;
@@ -49,6 +41,10 @@ PluginComponent {
         if (value.privacyMode !== "privacy" && value.privacyMode !== "personal")
             return false;
         if (!/^\d{4}-\d{2}-\d{2}$/.test(value.anchorWeekStart))
+            return false;
+        if (value.lastOnTimeReviewWeekStart !== null
+                && value.lastOnTimeReviewWeekStart !== undefined
+                && !/^\d{4}-\d{2}-\d{2}$/.test(value.lastOnTimeReviewWeekStart))
             return false;
         if (!value.theme || !isHexColor(value.theme.surface) || !isHexColor(value.theme.text) || !isHexColor(value.theme.accent))
             return false;
@@ -96,15 +92,24 @@ PluginComponent {
         return Math.max(0, Math.ceil((nextWeek.getTime() - now.getTime()) / 86400000));
     }
 
-    function deriveCommitment() {
-        const now = clock.date;
-        if (!summaryValid || !now || summary.privacyMode !== "personal")
-            return "";
-        if (typeof summary.commitment !== "string" || typeof summary.commitmentValidThrough !== "string")
-            return "";
-        if (summary.commitmentValidThrough < localISO(now))
-            return "";
-        return summary.commitment.trim().slice(0, 120);
+    function hideRunningApp() {
+        // DMS popouts are layer-shell surfaces and do not necessarily take
+        // keyboard focus from a regular application window. Ask the existing
+        // SLW instance to hide whenever DMS begins opening another popout.
+        // The process guard prevents this event from starting SLW when closed.
+        Quickshell.execDetached([
+            "sh",
+            "-c",
+            "if pgrep -u \"$(id -u)\" -f '^.*/stronglylivingweekly( |$)' >/dev/null; then exec \"$HOME/.local/bin/stronglylivingweekly\" --hide; fi"
+        ]);
+    }
+
+    Connections {
+        target: PopoutManager
+
+        function onPopoutOpening() {
+            root.hideRunningApp();
+        }
     }
 
     SystemClock {
@@ -128,15 +133,9 @@ PluginComponent {
         }
     }
 
-    Timer {
-        interval: 60000
-        running: true
-        repeat: true
-        onTriggered: summaryFile.reload()
-    }
-
     pillClickAction: () => {
-        Quickshell.execDetached(["stronglylivingweekly", "--show"]);
+        PopoutManager.closeAllPopouts();
+        Quickshell.execDetached(["stronglylivingweekly", "--toggle"]);
     }
 
     horizontalBarPill: Component {
@@ -145,30 +144,20 @@ PluginComponent {
 
             DankIcon {
                 name: "calendar_view_week"
-                color: root.summaryValid ? root.summary.theme.accent : Theme.primary
-                size: Theme.iconSize - 5
+                color: Theme.widgetIconColor
+                size: Theme.barIconSize(root.barThickness, -6, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             StyledText {
                 text: root.weekText
-                color: root.summaryValid ? root.summary.theme.text : Theme.surfaceText
+                color: Theme.widgetTextColor
                 font.family: "JetBrains Mono"
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: Theme.barTextSize(root.barThickness, root.barConfig?.fontScale, root.barConfig?.maximizeWidgetText)
                 font.weight: Font.DemiBold
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            StyledText {
-                visible: root.currentCommitment.length > 0
-                width: Math.min(implicitWidth, 280)
-                text: root.currentCommitment
-                color: root.summaryValid ? root.summary.theme.accent : Theme.primary
-                font.family: "JetBrains Mono"
-                font.pixelSize: Theme.fontSizeSmall
-                elide: Text.ElideRight
-                anchors.verticalCenter: parent.verticalCenter
-            }
         }
     }
 
@@ -178,14 +167,14 @@ PluginComponent {
 
             DankIcon {
                 name: "calendar_view_week"
-                color: root.summaryValid ? root.summary.theme.accent : Theme.primary
-                size: Theme.iconSize - 5
+                color: Theme.widgetIconColor
+                size: Theme.barIconSize(root.barThickness, -6, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
             StyledText {
                 text: root.summaryValid ? String(root.currentWeekNumber) : "Open"
-                color: Theme.surfaceText
+                color: Theme.widgetTextColor
                 font.family: "JetBrains Mono"
                 font.pixelSize: Theme.fontSizeSmall
                 anchors.horizontalCenter: parent.horizontalCenter

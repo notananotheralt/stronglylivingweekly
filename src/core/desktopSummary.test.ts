@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDesktopSummary } from './desktopSummary'
+import {
+  createDesktopSummary,
+  findLastOnTimeReviewWeekStart,
+} from './desktopSummary'
 import { DEFAULT_APPEARANCE } from './theme'
 
 import type { LifeWeek } from './dates/lifeCalendar'
@@ -29,6 +32,7 @@ const settings: LifeSettings = {
     themeId: DEFAULT_APPEARANCE.themeId,
     customColors: { ...DEFAULT_APPEARANCE.customColors },
   },
+  lifeChapters: [],
 }
 
 function summary(overrides: Partial<LifeSettings> = {}) {
@@ -36,6 +40,7 @@ function summary(overrides: Partial<LifeSettings> = {}) {
     settings: { ...settings, ...overrides },
     anchorWeek: currentWeek,
     recordedWeeks: 21,
+    lastOnTimeReviewWeekStart: '2026-08-03',
     currentCommitment: 'Ship the Linux beta',
     generatedAt: '2026-08-15T10:00:00.000Z',
   })
@@ -67,6 +72,7 @@ describe('desktop summary privacy projection', () => {
       'totalWeeks',
       'weekStartsOn',
       'recordedWeeks',
+      'lastOnTimeReviewWeekStart',
       'privacyMode',
       'commitment',
       'commitmentValidThrough',
@@ -83,6 +89,7 @@ describe('desktop summary privacy projection', () => {
       settings,
       anchorWeek: { ...currentWeek, weekNumber: 99_999 },
       recordedWeeks: -5,
+      lastOnTimeReviewWeekStart: null,
       currentCommitment: '',
       generatedAt: '2026-08-15T10:00:00.000Z',
     })
@@ -109,5 +116,39 @@ describe('desktop summary privacy projection', () => {
       text: DEFAULT_APPEARANCE.customColors.text,
       accent: '#123456',
     })
+  })
+
+  it('projects only the newest completed on-time review date', () => {
+    expect(
+      findLastOnTimeReviewWeekStart({
+        retrospective: {
+          weekStart: '2026-08-10',
+          whatHappened: 'Late note',
+          rating: 3,
+          nextCommitment: '',
+          reviewKind: 'retrospective',
+          sealedAt: '2026-08-20T10:00:00.000Z',
+          updatedAt: '2026-08-20T10:00:00.000Z',
+        },
+        earlier: {
+          weekStart: '2026-07-27',
+          whatHappened: 'Earlier review',
+          rating: 4,
+          nextCommitment: 'Keep going',
+          reviewKind: 'on-time',
+          sealedAt: '2026-08-03T10:00:00.000Z',
+          updatedAt: '2026-08-03T10:00:00.000Z',
+        },
+        latest: {
+          weekStart: '2026-08-03',
+          whatHappened: 'Latest review',
+          rating: 5,
+          nextCommitment: 'Finish the work',
+          reviewKind: 'on-time',
+          sealedAt: '2026-08-10T10:00:00.000Z',
+          updatedAt: '2026-08-10T10:00:00.000Z',
+        },
+      }),
+    ).toBe('2026-08-03')
   })
 })

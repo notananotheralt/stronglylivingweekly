@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { AppIcon } from './AppIcon'
 import { addDays } from '../core/dates/localDate'
 import { getWeekDisplayState } from '../core/dates/reviewWindow'
 
@@ -7,6 +8,7 @@ import type { FormEvent } from 'react'
 import type { LifeWeek } from '../core/dates/lifeCalendar'
 import type {
   DailyNote,
+  LifeChapter,
   PrivacyMode,
   WeekEntry,
 } from '../core/models'
@@ -24,6 +26,7 @@ interface WeekEditorProps {
   previousCommitment: string
   dailyNotes: DailyNote[]
   previousYears: PreviousYearItem[]
+  chapters: LifeChapter[]
   onSave: (entry: WeekEntry) => void
   onSaveDailyNote: (note: DailyNote) => void
   onRequestPersonal: () => void
@@ -57,6 +60,7 @@ function Rating({
             type="button"
             onClick={() => onChange(rating)}
             aria-pressed={value === rating}
+            aria-label={`${rating} out of 5${rating === 1 ? ', difficult' : rating === 5 ? ', excellent' : ''}`}
           >
             {rating}
           </button>
@@ -74,6 +78,7 @@ export function WeekEditor({
   previousCommitment,
   dailyNotes,
   previousYears,
+  chapters,
   onSave,
   onSaveDailyNote,
   onRequestPersonal,
@@ -142,20 +147,51 @@ export function WeekEditor({
   )
 
   return (
-    <aside className="week-sheet" aria-labelledby="week-sheet-title">
+    <aside
+      className="week-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="week-sheet-title"
+    >
       <header className="week-sheet__header">
         <div>
           <span className="week-sheet__state">{state.replace('-', ' ')}</span>
-          <h2 id="week-sheet-title">{formatDate(week.startDate)}</h2>
+          <h2 id="week-sheet-title">Week {week.weekNumber.toLocaleString()}</h2>
           <p>
-            {formatDate(week.startDate)} -{' '}
+            Age {week.ageYear} · {formatDate(week.startDate)} —{' '}
             {formatDate(addDays(week.endDateExclusive, -1))}
           </p>
         </div>
         <button className="icon-button" type="button" onClick={onClose} aria-label="Close week">
-          X
+          <AppIcon name="close" />
         </button>
       </header>
+
+      {chapters.length > 0 && privacyMode === 'personal' && (
+        <section className="week-chapters" aria-label="Life chapters this week">
+          <span>Life chapters</span>
+          <div>
+            {chapters.map((chapter) => (
+              <article key={chapter.id}>
+                <i
+                  style={{ backgroundColor: chapter.color }}
+                  aria-hidden="true"
+                />
+                <div>
+                  <strong>{chapter.title}</strong>
+                  <small>
+                    {chapter.kind === 'milestone' ? 'Milestone' : 'Chapter'}
+                    {chapter.confidence === 'approximate'
+                      ? ' · dates approximate'
+                      : ''}
+                  </small>
+                  {chapter.note && <p>{chapter.note}</p>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {privateGate ? (
         <section className="privacy-gate">

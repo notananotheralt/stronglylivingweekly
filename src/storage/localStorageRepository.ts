@@ -3,11 +3,13 @@ import {
   DEFAULT_APPEARANCE,
   isHexColor,
 } from '../core/theme'
+import { MAX_LIFE_CHAPTERS } from '../core/timeline'
 
 import type {
   DailyNote,
   AppearanceSettings,
   LifeCalendarBackup,
+  LifeChapter,
   LifeSettings,
   ThemeColors,
   ThemeId,
@@ -45,6 +47,11 @@ interface LegacyBackup {
   entries: Record<string, LegacyWeekEntry>
 }
 
+export interface TimelineSeed {
+  seedId: string
+  chapters: LifeChapter[]
+}
+
 function readJSON(key: string): unknown {
   try {
     const value = window.localStorage.getItem(key)
@@ -67,6 +74,7 @@ function defaultSettings(birthDate: string): LifeSettings {
       themeId: DEFAULT_APPEARANCE.themeId,
       customColors: { ...DEFAULT_APPEARANCE.customColors },
     },
+    lifeChapters: [],
   }
 }
 
@@ -84,7 +92,7 @@ function isValidDate(value: unknown): value is string {
 }
 
 function isThemeId(value: unknown): value is ThemeId {
-  return ['observatory', 'graphite', 'frost', 'ember', 'custom'].includes(
+  return ['desktop', 'observatory', 'graphite', 'frost', 'ember', 'custom'].includes(
     String(value),
   )
 }
@@ -129,12 +137,101 @@ function parseAppearance(value: unknown): AppearanceSettings {
   }
 }
 
+function parseLifeChapters(value: unknown): LifeChapter[] | null {
+  if (value === undefined) {
+    return []
+  }
+
+  if (!Array.isArray(value) || value.length > MAX_LIFE_CHAPTERS) {
+    return null
+  }
+
+  const chapters: LifeChapter[] = []
+  const ids = new Set<string>()
+
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') {
+      return null
+    }
+
+    const chapter = candidate as Partial<LifeChapter>
+
+    if (
+      typeof chapter.id !== 'string' ||
+      !chapter.id.trim() ||
+      chapter.id.length > 100 ||
+      ids.has(chapter.id) ||
+      typeof chapter.title !== 'string' ||
+      !chapter.title.trim() ||
+      chapter.title.length > 100 ||
+      !isValidDate(chapter.startDate) ||
+      !isValidDate(chapter.endDate) ||
+      chapter.startDate > chapter.endDate ||
+      !isHexColor(chapter.color) ||
+      (chapter.kind !== 'chapter' && chapter.kind !== 'milestone') ||
+      (chapter.confidence !== 'exact' &&
+        chapter.confidence !== 'approximate') ||
+      typeof chapter.note !== 'string' ||
+      chapter.note.length > 1_000
+    ) {
+      return null
+    }
+
+    ids.add(chapter.id)
+    chapters.push({
+      id: chapter.id,
+      title: chapter.title.trim(),
+      startDate: chapter.startDate,
+      endDate:
+        chapter.kind === 'milestone' ? chapter.startDate : chapter.endDate,
+      color: chapter.color.toLowerCase(),
+      kind: chapter.kind,
+      confidence: chapter.confidence,
+      note: chapter.note.trim(),
+    })
+  }
+
+  return chapters
+}
+
+export function parseTimelineSeed(source: string): TimelineSeed {
+  let value: unknown
+
+  try {
+    value = JSON.parse(source) as unknown
+  } catch {
+    throw new Error('The life chapter seed is not valid JSON.')
+  }
+
+  if (!value || typeof value !== 'object') {
+    throw new Error('The life chapter seed is invalid.')
+  }
+
+  const seed = value as Partial<TimelineSeed>
+  const chapters = parseLifeChapters(seed.chapters)
+
+  if (
+    typeof seed.seedId !== 'string' ||
+    !seed.seedId.trim() ||
+    seed.seedId.length > 100 ||
+    !chapters
+  ) {
+    throw new Error('The life chapter seed is invalid.')
+  }
+
+  return {
+    seedId: seed.seedId.trim(),
+    chapters,
+  }
+}
+
 function parseLifeSettings(value: unknown): LifeSettings | null {
   if (!value || typeof value !== 'object') {
     return null
   }
 
   const settings = value as Partial<LifeSettings>
+  const lifeChapters = parseLifeChapters(settings.lifeChapters)
 
   if (
     !isValidDate(settings.birthDate) ||
@@ -144,7 +241,8 @@ function parseLifeSettings(value: unknown): LifeSettings | null {
     typeof settings.quote !== 'string' ||
     typeof settings.showDate !== 'boolean' ||
     typeof settings.showYearProgress !== 'boolean' ||
-    typeof settings.showWeekRemaining !== 'boolean'
+    typeof settings.showWeekRemaining !== 'boolean' ||
+    !lifeChapters
   ) {
     return null
   }
@@ -160,6 +258,7 @@ function parseLifeSettings(value: unknown): LifeSettings | null {
       showYearProgress: settings.showYearProgress,
       showWeekRemaining: settings.showWeekRemaining,
       appearance: parseAppearance(settings.appearance),
+      lifeChapters,
     }
   } catch {
     return null

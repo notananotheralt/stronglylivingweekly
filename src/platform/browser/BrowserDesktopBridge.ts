@@ -1,4 +1,5 @@
 import type { DesktopSummary } from '../../core/desktopSummary'
+import type { ThemeColors } from '../../core/models'
 import type { DesktopBridge } from '../DesktopBridge'
 
 export class BrowserDesktopBridge implements DesktopBridge {
@@ -6,6 +7,14 @@ export class BrowserDesktopBridge implements DesktopBridge {
 
   closeMainWindow(): Promise<void> {
     return Promise.resolve()
+  }
+
+  readDesktopTheme(): Promise<ThemeColors | null> {
+    return Promise.resolve(null)
+  }
+
+  readTimelineSeed(): Promise<string | null> {
+    return Promise.resolve(null)
   }
 
   writeDesktopSummary(summary: DesktopSummary): Promise<void> {

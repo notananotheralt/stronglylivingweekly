@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { listen } from '@tauri-apps/api/event'
 
 import './App.css'
 
+import { AppIcon } from './components/AppIcon'
 import { LifeGrid } from './components/LifeGrid'
+import { RestoreBackupDialog } from './components/RestoreBackupDialog'
 import { SettingsPanel } from './components/SettingsPanel'
 import { SetupForm } from './components/SetupForm'
 import { WeekEditor } from './components/WeekEditor'
 import { calculateClockProgress } from './core/dates/clockProgress'
-import { createDesktopSummary } from './core/desktopSummary'
+import { createStripMessages } from './core/quoteRotation'
+import {
+  createDesktopSummary,
+  findLastOnTimeReviewWeekStart,
+} from './core/desktopSummary'
 import {
   calculateLifeStats,
   generateLifeWeeks,
@@ -16,7 +23,11 @@ import {
   addYearsClamped,
   todayISO,
 } from './core/dates/localDate'
-import { themeVariables } from './core/theme'
+import {
+  DEFAULT_APPEARANCE,
+  resolveThemeColors,
+  themeVariables,
+} from './core/theme'
 import { getDesktopBridge, isTauriRuntime } from './platform'
 import {
   getWeekDisplayState,
@@ -28,19 +39,57 @@ import {
   loadEntries,
   loadSettings,
   parseBackup,
+  parseTimelineSeed,
   restoreBackup,
   saveDailyNote,
   saveEntry,
   saveSettings,
 } from './storage/localStorageRepository'
+import { chaptersForWeek } from './core/timeline'
 
 import type { ChangeEvent, CSSProperties } from 'react'
 import type { LifeWeek } from './core/dates/lifeCalendar'
 import type {
   DailyNote,
+  LifeCalendarBackup,
   LifeSettings,
+  ThemeColors,
   WeekEntry,
 } from './core/models'
+
+const MAX_BACKUP_BYTES = 64 * 1024 * 1024
+const TIMELINE_SEED_MARKER_KEY =
+  'strongly-living-weekly.timeline-seed-imported.v1'
+
+function themesMatch(
+  first: ThemeColors,
+  second: ThemeColors,
+): boolean {
+  return (Object.keys(first) as Array<keyof ThemeColors>).every(
+    (key) => first[key] === second[key],
+  )
+}
+
+function applyDesktopTheme(
+  settings: LifeSettings,
+  desktopTheme: ThemeColors | null,
+): LifeSettings {
+  if (
+    settings.appearance.themeId !== 'desktop' ||
+    !desktopTheme ||
+    themesMatch(settings.appearance.customColors, desktopTheme)
+  ) {
+    return settings
+  }
+
+  return {
+    ...settings,
+    appearance: {
+      themeId: 'desktop',
+      customColors: { ...desktopTheme },
+    },
+  }
+}
 
 function formatPercentage(value: number): string {
   return new Intl.NumberFormat(undefined, {
@@ -68,14 +117,131 @@ function App() {
     loadDailyNotes,
   )
   const [now, setNow] = useState(() => new Date())
-  const [focusMode, setFocusMode] = useState(false)
   const [selectedWeekStart, setSelectedWeekStart] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dataStatus, setDataStatus] = useState('')
+  const [desktopTheme, setDesktopTheme] = useState<ThemeColors | null>(null)
+  const [pendingBackup, setPendingBackup] =
+    useState<LifeCalendarBackup | null>(null)
+  const [stripTick, setStripTick] = useState(0)
+  const timelineSeedChecked = useRef(false)
+  const reviewPromptedFor = useRef('')
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000)
     return () => window.clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (!settings || timelineSeedChecked.current) {
+      return
+    }
+
+    timelineSeedChecked.current = true
+    let cancelled = false
+
+    void getDesktopBridge()
+      .then((desktop) => desktop.readTimelineSeed())
+      .then((source) => {
+        if (cancelled || !source) {
+          return
+        }
+
+        const seed = parseTimelineSeed(source)
+
+        if (window.localStorage.getItem(TIMELINE_SEED_MARKER_KEY) === seed.seedId) {
+          return
+        }
+
+        setSettingsState((current) => {
+          if (!current) {
+            return current
+          }
+
+          const seededIds = new Set(seed.chapters.map((chapter) => chapter.id))
+          const nextSettings = {
+            ...current,
+            lifeChapters: [
+              ...current.lifeChapters.filter(
+                (chapter) => !seededIds.has(chapter.id),
+              ),
+              ...seed.chapters,
+            ],
+          }
+
+          saveSettings(nextSettings)
+          window.localStorage.setItem(TIMELINE_SEED_MARKER_KEY, seed.seedId)
+          return nextSettings
+        })
+      })
+      .catch((error: unknown) => {
+        console.warn('The optional life chapter seed could not be imported.', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [settings])
+
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setStripTick((current) => current + 1),
+      18_000,
+    )
+    return () => window.clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let refreshTimer: number | undefined
+    let stopListening: (() => void) | undefined
+
+    function refreshDesktopTheme(): void {
+      void getDesktopBridge()
+        .then((desktop) => desktop.readDesktopTheme())
+        .then((theme) => {
+          if (cancelled || !theme) {
+            return
+          }
+
+          setDesktopTheme(theme)
+          setSettingsState((current) => {
+            if (!current) {
+              return current
+            }
+
+            const themed = applyDesktopTheme(current, theme)
+            if (themed !== current) {
+              saveSettings(themed)
+            }
+            return themed
+          })
+        })
+        .catch((error: unknown) => {
+          console.warn('The desktop palette is unavailable.', error)
+        })
+    }
+
+    refreshDesktopTheme()
+
+    if (isTauriRuntime()) {
+      void listen('ricemood-theme-changed', () => {
+        window.clearTimeout(refreshTimer)
+        refreshTimer = window.setTimeout(refreshDesktopTheme, 250)
+      }).then((unlisten) => {
+        if (cancelled) {
+          unlisten()
+        } else {
+          stopListening = unlisten
+        }
+      })
+    }
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(refreshTimer)
+      stopListening?.()
+    }
   }, [])
 
   const today = todayISO(now)
@@ -99,6 +265,16 @@ function App() {
       getWeekDisplayState(week, today, entries[week.startDate]) ===
       'awaiting-review',
   )
+
+  useEffect(() => {
+    if (!reviewWeek || reviewPromptedFor.current === reviewWeek.startDate) {
+      return
+    }
+
+    reviewPromptedFor.current = reviewWeek.startDate
+    setSelectedWeekStart(reviewWeek.startDate)
+  }, [reviewWeek])
+
   const selectedWeek = weeks.find(
     (week) => week.startDate === selectedWeekStart,
   )
@@ -121,6 +297,10 @@ function App() {
   const recordedWeeks = Object.values(entries).filter(
     (entry) => entry.reviewKind === 'on-time',
   ).length
+  const lastOnTimeReviewWeekStart = useMemo(
+    () => findLastOnTimeReviewWeekStart(entries),
+    [entries],
+  )
 
   useEffect(() => {
     if (!settings || !currentWeek) {
@@ -131,8 +311,9 @@ function App() {
       settings,
       anchorWeek: currentWeek,
       recordedWeeks,
+      lastOnTimeReviewWeekStart,
       currentCommitment,
-      generatedAt: now.toISOString(),
+      generatedAt: new Date().toISOString(),
     })
 
     void getDesktopBridge()
@@ -140,7 +321,13 @@ function App() {
       .catch((error: unknown) => {
         console.error('Could not update the desktop summary.', error)
       })
-  }, [currentCommitment, currentWeek, now, recordedWeeks, settings])
+  }, [
+    currentCommitment,
+    currentWeek,
+    lastOnTimeReviewWeekStart,
+    recordedWeeks,
+    settings,
+  ])
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent): void {
@@ -148,12 +335,12 @@ function App() {
         return
       }
 
-      if (settingsOpen) {
+      if (pendingBackup) {
+        setPendingBackup(null)
+      } else if (settingsOpen) {
         setSettingsOpen(false)
       } else if (selectedWeekStart) {
         setSelectedWeekStart('')
-      } else if (focusMode) {
-        setFocusMode(false)
       } else if (isTauriRuntime()) {
         void getDesktopBridge().then((desktop) => desktop.closeMainWindow())
       }
@@ -161,7 +348,7 @@ function App() {
 
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [focusMode, selectedWeekStart, settingsOpen])
+  }, [pendingBackup, selectedWeekStart, settingsOpen])
 
   function commitmentBefore(week: LifeWeek): string {
     if (week.index === 0) {
@@ -211,8 +398,9 @@ function App() {
   }
 
   function handleSettingsSave(nextSettings: LifeSettings): void {
-    saveSettings(nextSettings)
-    setSettingsState(nextSettings)
+    const themedSettings = applyDesktopTheme(nextSettings, desktopTheme)
+    saveSettings(themedSettings)
+    setSettingsState(themedSettings)
     setSettingsOpen(false)
   }
 
@@ -284,14 +472,14 @@ function App() {
     }
 
     try {
+      if (file.size > MAX_BACKUP_BYTES) {
+        throw new Error('This backup is larger than the 64 MB safety limit.')
+      }
+
       const backup = parseBackup(await file.text())
-      restoreBackup(backup)
-      setSettingsState(backup.settings)
-      setEntries(backup.entries)
-      setDailyNotes(backup.dailyNotes)
-      setSelectedWeekStart('')
+      setPendingBackup(backup)
       setDataStatus(
-        `Restored ${Object.keys(backup.entries).length} weekly records and ${Object.keys(backup.dailyNotes).length} daily notes.`,
+        `Backup checked: ${Object.keys(backup.entries).length} weekly records, ${Object.keys(backup.dailyNotes).length} daily notes, and ${backup.settings.lifeChapters.length} life chapters.`,
       )
     } catch (error) {
       setDataStatus(
@@ -304,10 +492,56 @@ function App() {
     }
   }
 
+  function confirmBackupRestore(): void {
+    if (!pendingBackup) {
+      return
+    }
+
+    const restoredSettings = applyDesktopTheme(
+      pendingBackup.settings,
+      desktopTheme,
+    )
+    const restoredBackup = {
+      ...pendingBackup,
+      settings: restoredSettings,
+    }
+
+    restoreBackup(restoredBackup)
+    setSettingsState(restoredSettings)
+    setEntries(restoredBackup.entries)
+    setDailyNotes(restoredBackup.dailyNotes)
+    setSelectedWeekStart('')
+    setSettingsOpen(false)
+    setPendingBackup(null)
+    setDataStatus(
+      `Restored ${Object.keys(restoredBackup.entries).length} weekly records, ${Object.keys(restoredBackup.dailyNotes).length} daily notes, and ${restoredSettings.lifeChapters.length} life chapters.`,
+    )
+  }
+
   if (!settings) {
+    const setupAppearance = {
+      themeId: 'desktop' as const,
+      customColors:
+        desktopTheme ?? { ...DEFAULT_APPEARANCE.customColors },
+    }
+
     return (
-      <main className="setup-screen">
-        <SetupForm onSave={handleSettingsSave} />
+      <main
+        className="setup-screen"
+        style={themeVariables(setupAppearance) as CSSProperties}
+      >
+        <SetupForm
+          dataStatus={dataStatus}
+          onSave={handleSettingsSave}
+          onImport={handleBackupImport}
+        />
+        {pendingBackup && (
+          <RestoreBackupDialog
+            backup={pendingBackup}
+            onCancel={() => setPendingBackup(null)}
+            onConfirm={confirmBackupRestore}
+          />
+        )}
       </main>
     )
   }
@@ -318,24 +552,25 @@ function App() {
 
   const selectedForKeyboard =
     selectedWeekStart || reviewWeek?.startDate || currentWeek.startDate
-  const commitmentOrQuote =
-    settings.privacyMode === 'personal' && currentCommitment
-      ? currentCommitment
-      : settings.quote.trim()
-  const stripLabel =
-    settings.privacyMode === 'personal' && currentCommitment
-      ? 'This week'
-      : commitmentOrQuote
-        ? 'Quote'
-        : ''
+  const stripMessages = createStripMessages(
+    settings.privacyMode,
+    currentCommitment,
+    settings.quote,
+  )
+  const stripMessage = stripMessages[stripTick % stripMessages.length]
   const mapTheme = themeVariables(settings.appearance) as CSSProperties
 
   return (
     <main
-      className={`map-screen map-screen--${settings.privacyMode}${focusMode ? ' is-focus' : ''}`}
+      className={`map-screen map-screen--${settings.privacyMode}`}
       style={mapTheme}
     >
       <header className="metric-strip" data-tauri-drag-region>
+        <div className="metric-strip__brand" aria-label="Strongly Living Weekly">
+          <span className="brand-mark" aria-hidden="true">52×80</span>
+          <span className="brand-name">Strongly Living <b>Weekly</b></span>
+        </div>
+
         <div className="metric-strip__items">
           {settings.showDate && (
             <div className="top-metric top-metric--date">
@@ -370,25 +605,21 @@ function App() {
               className="button button--review"
               type="button"
               onClick={() => {
-                setFocusMode(true)
                 setSelectedWeekStart(reviewWeek.startDate)
               }}
             >
+              <AppIcon name="calendar" />
               Review open
             </button>
           )}
-          <button className="button" type="button" onClick={togglePrivacy}>
-            {settings.privacyMode === 'privacy' ? 'Privacy' : 'Personal'}
-          </button>
           <button
-            className="button"
+            className="button mode-button"
             type="button"
-            onClick={() => {
-              setFocusMode((current) => !current)
-              setSelectedWeekStart('')
-            }}
+            onClick={togglePrivacy}
+            aria-label={`Current mode: ${settings.privacyMode}. Switch to ${settings.privacyMode === 'privacy' ? 'Personal' : 'Privacy'} mode.`}
           >
-            {focusMode ? 'Done' : 'Focus'}
+            <AppIcon name={settings.privacyMode === 'privacy' ? 'shield' : 'user'} />
+            {settings.privacyMode === 'privacy' ? 'Private' : 'Personal'}
           </button>
           <button
             className="icon-button"
@@ -396,7 +627,7 @@ function App() {
             onClick={() => setSettingsOpen(true)}
             aria-label="Open settings"
           >
-            ...
+            <AppIcon name="settings" />
           </button>
           {isTauriRuntime() && (
             <button
@@ -409,7 +640,7 @@ function App() {
               }}
               aria-label="Close Strongly Living Weekly"
             >
-              ×
+              <AppIcon name="close" />
             </button>
           )}
         </div>
@@ -420,26 +651,28 @@ function App() {
         entries={entries}
         today={today}
         privacyMode={settings.privacyMode}
+        colors={resolveThemeColors(settings.appearance)}
+        chapters={settings.lifeChapters}
         selectedWeekStart={selectedForKeyboard}
-        interactive={focusMode}
         onSelectWeek={handleWeekSelect}
       />
 
-      <footer
-        className={`commitment-strip${!commitmentOrQuote && !focusMode ? ' commitment-strip--empty' : ''}`}
-      >
+      <footer className="commitment-strip">
         <div>
-          {stripLabel && <span>{stripLabel}</span>}
-          <p>{commitmentOrQuote}</p>
+          <span>{stripMessage.label}</span>
+          <p className="strip-message" key={`${stripTick}-${stripMessage.text}`}>
+            {stripMessage.text}
+          </p>
         </div>
-        {focusMode && (
-          <div className="map-legend" aria-label="Map legend">
-            <span><i className="legend-swatch legend-swatch--current" />Current</span>
-            <span><i className="legend-swatch legend-swatch--recorded" />Recorded</span>
-            <span><i className="legend-swatch legend-swatch--missed" />Missed</span>
-            <span><i className="legend-swatch legend-swatch--future" />Future</span>
-          </div>
-        )}
+        <div className="map-legend" aria-label="Map legend">
+          <span><i className="legend-swatch legend-swatch--current" />Current</span>
+          <span><i className="legend-swatch legend-swatch--recorded" />Recorded</span>
+          <span><i className="legend-swatch legend-swatch--missed" />Missed</span>
+          <span><i className="legend-swatch legend-swatch--future" />Future</span>
+          {settings.lifeChapters.length > 0 && (
+            <span><i className="legend-swatch legend-swatch--chapters" />Chapters</span>
+          )}
+        </div>
       </footer>
 
       {selectedWeek && (
@@ -459,6 +692,7 @@ function App() {
             previousCommitment={commitmentBefore(selectedWeek)}
             dailyNotes={notesForWeek(selectedWeek)}
             previousYears={previousYearsFor(selectedWeek)}
+            chapters={chaptersForWeek(selectedWeek, settings.lifeChapters)}
             onSave={handleEntrySave}
             onSaveDailyNote={handleDailyNoteSave}
             onRequestPersonal={usePersonalMode}
@@ -477,6 +711,7 @@ function App() {
           />
           <SettingsPanel
             settings={settings}
+            desktopTheme={desktopTheme}
             dataStatus={dataStatus}
             onSave={handleSettingsSave}
             onExport={downloadBackup}
@@ -484,6 +719,14 @@ function App() {
             onClose={() => setSettingsOpen(false)}
           />
         </div>
+      )}
+
+      {pendingBackup && (
+        <RestoreBackupDialog
+          backup={pendingBackup}
+          onCancel={() => setPendingBackup(null)}
+          onConfirm={confirmBackupRestore}
+        />
       )}
     </main>
   )

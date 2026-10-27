@@ -1,0 +1,6 @@
+[Unit]
+Description=Notify when the Strongly Living Weekly Monday review is incomplete
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/stronglylivingweekly-reminder

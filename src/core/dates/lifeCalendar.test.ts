@@ -45,6 +45,7 @@ describe('life calendar calculations', () => {
       themeId: DEFAULT_APPEARANCE.themeId,
       customColors: { ...DEFAULT_APPEARANCE.customColors },
     },
+    lifeChapters: [],
   }
 
   it('creates a partial first week when birth was not on Monday', () => {

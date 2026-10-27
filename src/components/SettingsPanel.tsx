@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 
+import { AppIcon } from './AppIcon'
+import { TimelineEditor } from './TimelineEditor'
 import { todayISO } from '../core/dates/localDate'
 import {
   isHexColor,
@@ -18,6 +20,7 @@ import type {
 
 interface SettingsPanelProps {
   settings: LifeSettings
+  desktopTheme: ThemeColors | null
   dataStatus: string
   onSave: (settings: LifeSettings) => void
   onExport: () => void
@@ -27,6 +30,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({
   settings,
+  desktopTheme,
   dataStatus,
   onSave,
   onExport,
@@ -35,10 +39,15 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState(settings)
   const [appearanceError, setAppearanceError] = useState('')
+  const [settingsError, setSettingsError] = useState('')
 
   const themeOptions = useMemo(
     () => [
-      ...THEME_PRESETS,
+      ...THEME_PRESETS.map((theme) =>
+        theme.id === 'desktop' && desktopTheme
+          ? { ...theme, colors: desktopTheme }
+          : theme,
+      ),
       {
         id: 'custom' as const,
         name: 'Custom',
@@ -46,7 +55,7 @@ export function SettingsPanel({
         colors: draft.appearance.customColors,
       },
     ],
-    [draft.appearance.customColors],
+    [desktopTheme, draft.appearance.customColors],
   )
 
   function update<K extends keyof LifeSettings>(
@@ -59,7 +68,14 @@ export function SettingsPanel({
   function updateTheme(themeId: ThemeId): void {
     setDraft((current) => ({
       ...current,
-      appearance: { ...current.appearance, themeId },
+      appearance: {
+        ...current.appearance,
+        themeId,
+        customColors:
+          themeId === 'desktop' && desktopTheme
+            ? { ...desktopTheme }
+            : current.appearance.customColors,
+      },
     }))
     setAppearanceError('')
   }
@@ -81,6 +97,11 @@ export function SettingsPanel({
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
 
+    if (!draft.birthDate || draft.birthDate > todayISO()) {
+      setSettingsError('Choose a valid birthdate that is not in the future.')
+      return
+    }
+
     if (
       draft.appearance.themeId === 'custom' &&
       Object.values(draft.appearance.customColors).some(
@@ -91,11 +112,30 @@ export function SettingsPanel({
       return
     }
 
+    if (
+      draft.lifeChapters.some(
+        (chapter) =>
+          !chapter.title.trim() ||
+          chapter.startDate > chapter.endDate ||
+          !isHexColor(chapter.color),
+      )
+    ) {
+      setSettingsError(
+        'Check the title, date order, and six-digit color for each life chapter.',
+      )
+      return
+    }
+
     onSave(draft)
   }
 
   return (
-    <aside className="settings-sheet" aria-labelledby="settings-title">
+    <aside
+      className="settings-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
       <header className="settings-sheet__header">
         <div>
           <span>Settings</span>
@@ -107,7 +147,7 @@ export function SettingsPanel({
           onClick={onClose}
           aria-label="Close settings"
         >
-          X
+          <AppIcon name="close" />
         </button>
       </header>
 
@@ -215,25 +255,42 @@ export function SettingsPanel({
           </div>
         </fieldset>
 
+        <TimelineEditor
+          chapters={draft.lifeChapters}
+          onChange={(lifeChapters) => {
+            update('lifeChapters', lifeChapters)
+            setSettingsError('')
+          }}
+        />
+
         <label className="form-field">
           <span>Birthdate</span>
           <input
+            required
             max={todayISO()}
             type="date"
             value={draft.birthDate}
-            onChange={(event) => update('birthDate', event.target.value)}
+            onChange={(event) => {
+              update('birthDate', event.target.value)
+              setSettingsError('')
+            }}
           />
           <small>4,160 weeks: 80 columns by 52.</small>
         </label>
+        {settingsError && <p className="form-error" role="alert">{settingsError}</p>}
 
         <label className="form-field">
-          <span>Quote fallback</span>
+          <span>Motivational rotation</span>
           <textarea
-            rows={3}
+            rows={4}
             value={draft.quote}
             onChange={(event) => update('quote', event.target.value)}
-            placeholder="Shown when a commitment is hidden or unavailable."
+            placeholder="One optional quote per line. Leave blank for the built-in rotation."
           />
+          <small>
+            In Personal mode, these rotate with your current commitment. Privacy
+            mode never reveals the commitment.
+          </small>
         </label>
 
         <fieldset className="settings-group">
@@ -274,12 +331,14 @@ export function SettingsPanel({
       <section className="data-actions">
         <div>
           <strong>Backup</strong>
-          <span>Reviews, notes, and settings</span>
+          <span>Reviews, notes, chapters, and settings</span>
         </div>
         <button className="button" type="button" onClick={onExport}>
+          <AppIcon name="archive" />
           Export JSON
         </button>
         <label className="button file-button">
+          <AppIcon name="restore" />
           Import JSON
           <input
             type="file"

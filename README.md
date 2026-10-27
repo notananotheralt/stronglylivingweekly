@@ -12,10 +12,12 @@ A quiet, local-first 4,160-week map built around a deliberate weekly review.
 - Clearly distinct on-time, missed, and retrospective weeks
 - Optional same-day notes inside the current week
 - "This week in previous years" when historical records exist
-- Commitment or user-saved quote strip
+- Editable, overlapping colored life chapters and one-day milestones
+- Rotating motivational strip that alternates a current commitment with quotes
+- Previous-commitment reminder during the next weekly review
 - Local version-two persistence with migration from the original beta
 - Version-one and version-two JSON backup import
-- Version-two JSON backup export including daily notes
+- Version-two JSON backup export including daily notes and life chapters
 
 The passive view intentionally has no live clock. The native Linux build writes
 a privacy-filtered desktop summary for the included DankMaterialShell capsule,
@@ -80,8 +82,12 @@ storage migration.
 
 The supported Quickshell integration lives in
 [`integrations/dank-material-shell/stronglyLivingWeekly`](integrations/dank-material-shell/stronglyLivingWeekly).
-It validates the summary schema, derives week rollover, hides expired or private
-commitments, and opens/focuses the native application when clicked.
+It validates the summary schema, derives week rollover, keeps the bar label
+compact, and inherits the live Ricemood/DMS widget colors. The optional user
+timer in [`integrations/systemd-user`](integrations/systemd-user) checks hourly
+during waking hours on Mondays and sends privacy-safe reminders only while the
+newly opened review remains incomplete. Clicking the capsule directly toggles
+the full native map beneath the bar.
 
 ## Port documentation
 

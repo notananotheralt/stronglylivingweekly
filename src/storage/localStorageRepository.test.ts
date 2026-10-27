@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseBackup } from './localStorageRepository'
+import { parseBackup, parseTimelineSeed } from './localStorageRepository'
 
 const settings = {
   birthDate: '2000-01-01',
@@ -43,7 +43,8 @@ describe('backup validation', () => {
 
     expect(backup.version).toBe(2)
     expect(backup.settings.privacyMode).toBe('privacy')
-    expect(backup.settings.appearance.themeId).toBe('observatory')
+    expect(backup.settings.appearance.themeId).toBe('desktop')
+    expect(backup.settings.lifeChapters).toEqual([])
     expect(backup.entries['2026-07-13']?.rating).toBe(4)
     expect(backup.dailyNotes['2026-07-15']?.text).toBe('Made progress.')
   })
@@ -96,6 +97,37 @@ describe('backup validation', () => {
     ).toThrow('not a valid Strongly Living Weekly backup')
   })
 
+  it('preserves validated life chapters and milestones', () => {
+    const backup = parseBackup(
+      JSON.stringify({
+        version: 2,
+        exportedAt: '2026-08-15T00:00:00.000Z',
+        settings: {
+          ...settings,
+          lifeChapters: [
+            {
+              id: 'school',
+              title: 'School',
+              startDate: '2022-08-08',
+              endDate: '2026-05-22',
+              color: '#789ABC',
+              kind: 'chapter',
+              confidence: 'approximate',
+              note: 'Editable context.',
+            },
+          ],
+        },
+        entries: {},
+        dailyNotes: {},
+      }),
+    )
+
+    expect(backup.settings.lifeChapters[0]).toMatchObject({
+      id: 'school',
+      color: '#789abc',
+    })
+  })
+
   it('rejects entries whose key and week start do not match', () => {
     expect(() =>
       parseBackup(
@@ -132,5 +164,37 @@ describe('backup validation', () => {
         }),
       ),
     ).toThrow('not a valid Strongly Living Weekly backup')
+  })
+})
+
+describe('one-time timeline seeds', () => {
+  it('validates a bounded list of life chapters', () => {
+    const seed = parseTimelineSeed(
+      JSON.stringify({
+        seedId: 'initial-personal-timeline',
+        chapters: [
+          {
+            id: 'graduation',
+            title: 'Graduation',
+            startDate: '2026-05-22',
+            endDate: '2026-05-22',
+            color: '#e3bd5f',
+            kind: 'milestone',
+            confidence: 'exact',
+            note: '',
+          },
+        ],
+      }),
+    )
+
+    expect(seed.seedId).toBe('initial-personal-timeline')
+    expect(seed.chapters[0]?.kind).toBe('milestone')
+  })
+
+  it('rejects malformed seeds', () => {
+    expect(() => parseTimelineSeed('{')).toThrow('not valid JSON')
+    expect(() =>
+      parseTimelineSeed(JSON.stringify({ seedId: '', chapters: [] })),
+    ).toThrow('seed is invalid')
   })
 })

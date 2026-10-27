@@ -9,6 +9,22 @@ export interface ThemePreset {
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
+    id: 'desktop',
+    name: 'Desktop',
+    description: 'Follow the current DMS wallpaper palette',
+    colors: {
+      canvas: '#0f1411',
+      surface: '#151b18',
+      text: '#edf1ed',
+      muted: '#89918c',
+      elapsed: '#35403a',
+      future: '#27302b',
+      recorded: '#789483',
+      current: '#aec4b6',
+      accent: '#c3a676',
+    },
+  },
+  {
     id: 'observatory',
     name: 'Observatory',
     description: 'Forest black and soft sage',
@@ -75,7 +91,7 @@ export const THEME_PRESETS: ThemePreset[] = [
 ]
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
-  themeId: 'observatory',
+  themeId: 'desktop',
   customColors: { ...THEME_PRESETS[0].colors },
 }
 
@@ -101,13 +117,16 @@ export function isHexColor(value: unknown): value is string {
 export function resolveThemeColors(
   appearance: AppearanceSettings,
 ): ThemeColors {
-  if (appearance.themeId === 'custom') {
+  if (
+    appearance.themeId === 'custom' ||
+    appearance.themeId === 'desktop'
+  ) {
     return appearance.customColors
   }
 
   return (
     THEME_PRESETS.find((theme) => theme.id === appearance.themeId)?.colors ??
-    THEME_PRESETS[0].colors
+    THEME_PRESETS[1].colors
   )
 }
 

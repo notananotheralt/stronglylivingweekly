@@ -25,12 +25,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "devCsp": null
     }
   },
   "bundle": {
     "active": true,
     "targets": ["deb"],
+    "category": "Productivity",
+    "shortDescription": "A private, local-first weekly life map",
+    "longDescription": "A fixed 4,160-week life map for deliberate Monday reviews, optional daily notes, and one quiet weekly commitment.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

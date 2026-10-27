@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { save } from '@tauri-apps/plugin-dialog'
 
 import type { DesktopSummary } from '../../core/desktopSummary'
+import type { ThemeColors } from '../../core/models'
 import type { DesktopBridge } from '../DesktopBridge'
 
 export class TauriDesktopBridge implements DesktopBridge {
@@ -10,6 +11,14 @@ export class TauriDesktopBridge implements DesktopBridge {
 
   async closeMainWindow(): Promise<void> {
     await getCurrentWindow().close()
+  }
+
+  async readDesktopTheme(): Promise<ThemeColors | null> {
+    return invoke<ThemeColors | null>('read_desktop_theme')
+  }
+
+  async readTimelineSeed(): Promise<string | null> {
+    return invoke<string | null>('read_timeline_seed')
   }
 
   async writeDesktopSummary(summary: DesktopSummary): Promise<void> {

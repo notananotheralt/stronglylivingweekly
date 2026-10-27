@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the Strongly Living Weekly review hourly on Mondays
+
+[Timer]
+OnCalendar=Mon *-*-* 08..23:00:00
+Persistent=true
+AccuracySec=1min
+Unit=stronglylivingweekly-reminder.service
+
+[Install]
+WantedBy=timers.target

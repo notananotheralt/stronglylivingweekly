@@ -7,6 +7,7 @@ export const TOTAL_LIFE_WEEKS = TARGET_AGE * WEEKS_PER_YEAR
 export type PrivacyMode = 'privacy' | 'personal'
 export type ReviewKind = 'on-time' | 'retrospective'
 export type ThemeId =
+  | 'desktop'
   | 'observatory'
   | 'graphite'
   | 'frost'
@@ -30,6 +31,20 @@ export interface AppearanceSettings {
   customColors: ThemeColors
 }
 
+export type LifeChapterKind = 'chapter' | 'milestone'
+export type DateConfidence = 'exact' | 'approximate'
+
+export interface LifeChapter {
+  id: string
+  title: string
+  startDate: ISODate
+  endDate: ISODate
+  color: string
+  kind: LifeChapterKind
+  confidence: DateConfidence
+  note: string
+}
+
 export interface LifeSettings {
   birthDate: ISODate
   weekStartsOn: WeekStartsOn
@@ -39,6 +54,7 @@ export interface LifeSettings {
   showYearProgress: boolean
   showWeekRemaining: boolean
   appearance: AppearanceSettings
+  lifeChapters: LifeChapter[]
 }
 
 export interface WeekEntry {

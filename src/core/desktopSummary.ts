@@ -7,7 +7,7 @@ import {
 } from './theme'
 
 import type { LifeWeek } from './dates/lifeCalendar'
-import type { LifeSettings } from './models'
+import type { LifeSettings, WeekEntry } from './models'
 
 export interface DesktopSummary {
   schema: 'stronglylivingweekly.summary.v1'
@@ -17,6 +17,7 @@ export interface DesktopSummary {
   totalWeeks: number
   weekStartsOn: 1
   recordedWeeks: number
+  lastOnTimeReviewWeekStart: string | null
   privacyMode: 'privacy' | 'personal'
   commitment: string | null
   commitmentValidThrough: string | null
@@ -31,6 +32,7 @@ export interface DesktopSummaryInput {
   settings: LifeSettings
   anchorWeek: LifeWeek
   recordedWeeks: number
+  lastOnTimeReviewWeekStart: string | null
   currentCommitment: string
   generatedAt: string
 }
@@ -47,6 +49,7 @@ export function createDesktopSummary({
   settings,
   anchorWeek,
   recordedWeeks,
+  lastOnTimeReviewWeekStart,
   currentCommitment,
   generatedAt,
 }: DesktopSummaryInput): DesktopSummary {
@@ -69,6 +72,7 @@ export function createDesktopSummary({
     totalWeeks: TOTAL_LIFE_WEEKS,
     weekStartsOn: 1,
     recordedWeeks: clampInteger(recordedWeeks, 0, TOTAL_LIFE_WEEKS),
+    lastOnTimeReviewWeekStart,
     privacyMode: settings.privacyMode,
     commitment,
     commitmentValidThrough: commitment
@@ -80,4 +84,16 @@ export function createDesktopSummary({
       accent: isHexColor(colors.accent) ? colors.accent : fallback.accent,
     },
   }
+}
+
+export function findLastOnTimeReviewWeekStart(
+  entries: Record<string, WeekEntry>,
+): string | null {
+  return Object.values(entries).reduce<string | null>((latest, entry) => {
+    if (entry.reviewKind !== 'on-time') {
+      return latest
+    }
+
+    return !latest || entry.weekStart > latest ? entry.weekStart : latest
+  }, null)
 }

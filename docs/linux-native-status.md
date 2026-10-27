@@ -4,13 +4,20 @@
 
 - Tauri v2 shell with ARM64-native Rust target support
 - stable application ID, binary name, main-window label, 16:10 minimum size,
-  custom close action, transparent native canvas, and JetBrains Mono UI
+  custom close action, compositor-managed glass, and JetBrains Mono UI
+- canvas-backed 80-by-52 map that keeps the ARM64 WebKit content process
+  responsive without creating 4,160 interactive DOM elements
+- editable, overlapping colored life chapters and milestone markers with
+  explicit exact/approximate date confidence
+- rotating motivational footer that keeps commitments privacy-projected
 - single-instance focus/show behavior for repeated `--show` launches
 - platform adapter isolating browser downloads from native window and dialog APIs
 - native JSON save dialog backed by a validated, atomic Rust write
 - privacy-projected `stronglylivingweekly.summary.v1` generation
 - Rust-side schema validation and mode-0600 atomic state writes
-- DMS/Quickshell capsule that reads no private database or browser storage
+- DMS/Quickshell capsule that inherits the live DMS palette and directly
+  toggles the full native map while reading no private database or browser storage
+- mild transparent native surface over the compositor-provided Niri blur
 - generated Linux application icon and Debian bundle target
 
 ## Validation commands

@@ -37,12 +37,6 @@ html {
   background: var(--canvas);
 }
 
-html.is-native,
-html.is-native body,
-html.is-native #root {
-  background: transparent;
-}
-
 body {
   min-width: 320px;
   min-height: 100vh;
